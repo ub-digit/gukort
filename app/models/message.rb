@@ -3,11 +3,12 @@ class Message < ApplicationRecord
     create(raw_message: message, status: "NEW")
   end
 
-  def parse_message
-    # validate xml first, TBD
+  def validate_message
     update_attributes({status: "VALIDATED"})
-    xml = create_xml_object raw_message
+  end
 
+  def parse_message
+    xml = create_xml_object raw_message
     attr_data = {
       originated_at: (parse_originated_at xml),
       message_source: (parse_message_source xml),
@@ -183,7 +184,6 @@ class Message < ApplicationRecord
     xml.search('GUKORT_UB/person/uid').text
   end
 
-
   def category_code_mapping faculty, department = ""
     faculty.upcase!
     department.upcase!
@@ -203,6 +203,180 @@ class Message < ApplicationRecord
     return "SL" if faculty.eql?("UFL")
     return "SL" if faculty.eql?("UN")
     return "SM" if faculty.eql?("VN")
+    return nil
+  end
+
+  def default_category
+    "EX"
+  end
+
+  def handle_new
+    # Check that category is student
+    if !message_category.eql?("STUDENT")
+      update_attributes({exit_message: "Invalid category #{__FILE__}:#{__LINE__}"})
+      return
+    end
+    # Handle personalnumber according to rules
+    personalnumber_12 = handle_personalnumber(personalnumber)
+    if personalnumber_12.blank?
+      update_attributes({exit_message: "Personalnumber format error #{__FILE__}:#{__LINE__}"})
+      return
+    end
+    # Check if personalnumber exists in Koha
+    if borrowernumber = Koha.get_borrowernumber(personalnumber_12)
+      # Personalnumber exists in Koha, update existing patron
+      if Koha.update(borrowernumber, cardnumber, message_category, categorycode)
+        update_attributes({status: "COMPLETED", exit_message: "Koha update success #{__FILE__}:#{__LINE__}"})
+      else
+        update_attributes({status: "COMPLETED", exit_message: "Koha update error #{__FILE__}:#{__LINE__}"})
+      end
+      return
+    end
+
+    # Fix address according to rules
+    address_parameter_list = handle_addresses self
+
+    debarments = []
+    # Set GNA if no addresses exists or only temprary address with non-local zip zipcode exist
+    debarments.push("gna") if gna_debarment? self
+    # If category code is empty set GU debarment
+    debarments.push("gu") if categorycode.blank?
+
+    parameter_list = {
+      origin: "gukort",
+      personalnumber: personalnumber_12,
+      cardnumber: cardnumber,
+      categorycode: categorycode.present? ? categorycode : default_category,
+      branchcode: "44",
+      debarments: debarments.join(","),
+      surname: surname,
+      firstname: firstname,
+      phone: phone,
+      email: email,
+      messaging_format: email.present? ? "email" : nil,
+      accept_text: "Biblioteksreglerna accepteras"
+    }.merge(address_parameter_list)
+
+    # Add member to Koha
+    if Koha.add(parameter_list)
+      # If category code is empty send email
+      if categorycode.blank?
+        ApplicationMailer.no_category(cardnumber: cardnumber, personalnumber: personalnumber_12, surname: surname, firstname: firstname).deliver_now
+      end
+
+      update_script = APP_CONFIG['external_update']['path']
+      if update_script.present?
+        # TBD run update script
+      end
+      update_attributes({status: "COMPLETED", exit_message: "Koha add success #{__FILE__}:#{__LINE__}"})
+      return
+    else
+      update_attributes({exit_message: "Koha add error #{__FILE__}:#{__LINE__}"})
+      return
+    end
+  end
+
+  def handle_card
+    # Check that type is UPDATECARDINVALID
+    if !message_type.eql?("UPDATECARDINVALID")
+      update_attributes({exit_message: "Invalid type #{__FILE__}:#{__LINE__}"})
+      return
+    end
+
+    # Handle personalnumber according to rules
+    personalnumber_12 = handle_personalnumber(personalnumber)
+    if personalnumber_12.blank?
+      update_attributes({exit_message: "Personalnumber format error #{__FILE__}:#{__LINE__}"})
+      return
+    end
+
+    # Get borrowernumber from Koha
+    borrowernumber = Koha.get_borrowernumber(personalnumber_12)
+    if borrowernumber.blank?
+      update_attributes({exit_message: "Borrowernumber does not exist in Koha #{__FILE__}:#{__LINE__}"})
+      return
+    end
+
+    # Write to Koha
+    if Koha.card_invalid(borrowernumber)
+      update_attributes({status: "COMPLETED", exit_message: "Koha update card success #{__FILE__}:#{__LINE__}"})
+      return
+    else
+      update_attributes({exit_message: "Koha update card error #{__FILE__}:#{__LINE__}"})
+      return
+    end
+  end
+
+  def handle_pnr
+    # Handle personalnumber according to rules
+    old_personalnumber_12 = handle_personalnumber(old_personalnumber)
+    new_personalnumber_12 = handle_personalnumber(personalnumber)
+    if old_personalnumber_12.blank? || new_personalnumber_12.blank?
+      update_attributes({exit_message: "Personalnumber format error #{__FILE__}:#{__LINE__}"})
+      return
+    end
+
+    # Check that new personalnumber not exist in Koha
+    if Koha.get_borrowernumber(new_personalnumber_12).present?
+      update_attributes({exit_message: "New personalnumber already exists in Koha #{__FILE__}:#{__LINE__}"})
+      return
+    end
+
+    # Get borrower number for oldpersonalnumber
+    borrowernumber = Koha.get_borrowernumber(old_personalnumber_12)
+    puts old_personalnumber_12
+    if borrowernumber.blank?
+      update_attributes({exit_message: "Personalnumber not found in Koha #{__FILE__}:#{__LINE__}"})
+      return
+    end
+
+    if Koha.update_pnr(borrowernumber, new_personalnumber_12)
+      update_attributes({status: "COMPLETED", exit_message: "Koha update pnr success #{__FILE__}:#{__LINE__}"})
+      return
+    else
+      update_attributes({exit_message: "Koha update pnr error #{__FILE__}:#{__LINE__}"})
+      return
+    end
+  end
+
+
+  private
+  def handle_addresses message
+    if message.address.blank? && message.temp_address.present? && local_zipcode?(message.temp_zipcode)
+      {address: message.temp_address,
+       zipcode: message.temp_zipcode,
+       city: message.temp_city,
+       country: message.temp_country
+      }
+    else
+      {address: message.address,
+       zipcode: message.zipcode,
+       city: message.city,
+       country: message.country,
+       b_address: message.temp_address,
+       b_zipcode: message.temp_zipcode,
+       b_city: message.temp_city,
+       b_country: message.temp_country
+      }
+    end
+  end
+
+  def gna_debarment? message
+    return true if message.address.blank? && message.temp_address.blank?
+    return true if message.temp_address.present? && !local_zipcode?(message.temp_zipcode)
+    false
+  end
+
+  def local_zipcode? code
+    return true if code.present? && code.length.eql?(5) && code.start_with?("4") && !code.eql?("40530")
+    false
+  end
+
+  def handle_personalnumber raw_number
+    return nil if raw_number.blank?
+    return raw_number if raw_number.length.eql?(12)
+    return "20" + raw_number if raw_number.length.eql?(10) && /^[0]/.match(raw_number)
+    return "19" + raw_number if raw_number.length.eql?(10) && /^[^0]/.match(raw_number)
     return nil
   end
 

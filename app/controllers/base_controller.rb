@@ -6,9 +6,11 @@ class BaseController < ApplicationController
     ref = "#{time.strftime("%Y-%m-%d-%H-%M-%S")}-#{time.usec}"
 
     if error
+      status = 400
       name = "ERROR"
       text = "The request resulted in an error. If You are going to contact GUB for furhter investigation of this error, please use the reference and datetime given in this response."
     else
+      status = 201
       name = "RECIEVED"
       text = "The request was successfully recieved and understood. It now awaits further processing by other systems at GUB."
     end
@@ -32,7 +34,7 @@ class BaseController < ApplicationController
       }
     end
     puts builder.to_xml
-    render xml: builder.to_xml
+    render status: status, xml: builder.to_xml
   end
 
 end
