@@ -83,8 +83,8 @@ class Message < ApplicationRecord
   end
 
   def parse_categorycode xml
-    faculty = xml.search('GUKORT_UB/membership/group[@type="FAKULTET"]/id').text
-    department = xml.search('GUKORT_UB/membership/group[@type="INSTITUTION"]/id').text
+    faculty = xml.search('GUKORT_UB/membership/group[@type="faculty"]/id').text
+    department = xml.search('GUKORT_UB/membership/group[@type="institution"]/id').text
     category_code_mapping faculty, department
   end
 
@@ -343,13 +343,13 @@ class Message < ApplicationRecord
   private
   def handle_addresses message
     if message.address.blank? && message.temp_address.present? && local_zipcode?(message.temp_zipcode)
-      {address: message.temp_address,
+      {address: [message.temp_co, message.temp_address].compact.join(" "),
        zipcode: message.temp_zipcode,
        city: message.temp_city,
        country: message.temp_country
       }
     else
-      {address: message.address,
+      {address: [message.co, message.address].compact.join(" "),
        zipcode: message.zipcode,
        city: message.city,
        country: message.country,
