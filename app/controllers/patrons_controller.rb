@@ -12,7 +12,6 @@ class PatronsController < BaseController
 
   def card
     message = Message.save_message request.body.read
-    render_response(original_type: 'UPDATE CARD')
     if !message.parse_message
       update_attributes({exit_message: "Parse error #{__FILE__}:#{__LINE__}"})
       render_response(original_type: 'UPDATE CARD', error: true, error_code: '400')
@@ -24,7 +23,6 @@ class PatronsController < BaseController
 
   def pnr
     message = Message.save_message request.body.read
-    render_response(original_type: 'UPDATE PNR')
     if !message.parse_message
       update_attributes({exit_message: "Parse error #{__FILE__}:#{__LINE__}"})
       render_response(original_type: 'UPDATE PNR', error: true, error_code: '400')
