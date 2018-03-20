@@ -3,7 +3,8 @@ class ApplicationMailer < ActionMailer::Base
   default to: APP_CONFIG['mail_settings']['to_email']
 
   def no_category(cardnumber:, personalnumber:, surname:, firstname:)
-    @subject = "GUKORT - kategori kan inte matchas"
+    subject_prefix = APP_CONFIG['mail_settings']['subject_prefix'].present? ? APP_CONFIG['mail_settings']['subject_prefix'] : ''
+    @subject = "#{subject_prefix}GUKORT - kategori kan inte matchas"
     @cardnumber = cardnumber
     @personalnumber = personalnumber
     @surname = surname
