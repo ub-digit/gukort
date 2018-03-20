@@ -253,6 +253,8 @@ class Message < ApplicationRecord
       firstname: firstname,
       phone: phone,
       email: email,
+      patronuserid: userid,
+      lang: "sv-SE",
       messaging_format: email.present? ? "email" : nil,
       accept_text: "Biblioteksreglerna accepteras"
     }.merge(address_parameter_list)
