@@ -63,6 +63,18 @@ class Koha
     end
   end
 
+  def self.card_valid(borrowernumber)
+    config = get_config
+    url = "#{config[:base_url]}/members/update"
+    parameter_list = {action: 'cardvalid', borrowernumber: borrowernumber}
+    response = RestClient.post(url, parameter_list.merge({userid: config[:user], password: config[:password]}))
+    if response && (response.code == 200 || response.code == 201)
+      return true
+    else
+      return false
+    end
+  end
+
   def self.get_config
     {
       base_url: APP_CONFIG['koha']['base_url'],

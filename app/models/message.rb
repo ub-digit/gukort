@@ -1,4 +1,6 @@
 class Message < ApplicationRecord
+  include ApplicationHelper
+
   def self.save_message message
     create(raw_message: message, status: "NEW")
   end
@@ -301,7 +303,7 @@ class Message < ApplicationRecord
 
     # Write to Koha
     if Koha.card_invalid(borrowernumber)
-      update_attributes({status: "COMPLETED", exit_message: "Koha update card success #{__FILE__}:#{__LINE__}"})
+      update_attributes({status: "WAITING", exit_message: "Koha update card success #{__FILE__}:#{__LINE__}"})
       return
     else
       update_attributes({exit_message: "Koha update card error #{__FILE__}:#{__LINE__}"})
@@ -372,14 +374,6 @@ class Message < ApplicationRecord
   def local_zipcode? code
     return true if code.present? && code.length.eql?(5) && code.start_with?("4") && !code.eql?("40530")
     false
-  end
-
-  def handle_personalnumber raw_number
-    return nil if raw_number.blank?
-    return raw_number if raw_number.length.eql?(12)
-    return "20" + raw_number if raw_number.length.eql?(10) && /^[0]/.match(raw_number)
-    return "19" + raw_number if raw_number.length.eql?(10) && /^[^0]/.match(raw_number)
-    return nil
   end
 
 end
