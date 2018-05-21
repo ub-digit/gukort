@@ -320,7 +320,7 @@ class Message < ApplicationRecord
       end
     else
       # Don't update card i Koha
-      update_attributes({status: "COMPLETED", exit_message: "Koha check canceled success, no action #{__FILE__}:#{__LINE__}"})
+      update_attributes({status: "COMPLETED", exit_message: "Koha check canceled success, not canceled at GukortAdm #{__FILE__}:#{__LINE__}"})
     end
   end
 
