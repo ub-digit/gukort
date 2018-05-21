@@ -1,4 +1,7 @@
 class Message < ApplicationRecord
+
+  scope :recently_canceled, -> { where(message_type: "UPDATECARDINVALID").where(status: "WAITING").where('updated_at < ?', 30.minutes.ago) }
+
   def self.save_message message
     create(raw_message: message, status: "NEW")
   end
@@ -285,29 +288,42 @@ class Message < ApplicationRecord
       return
     end
 
-    # Handle personalnumber according to rules
-    personalnumber_12 = handle_personalnumber(personalnumber)
-    if personalnumber_12.blank?
-      update_attributes({exit_message: "Personalnumber format error #{__FILE__}:#{__LINE__}"})
-      return
-    end
+    # Set status to waiting
+    update_attributes({status: "WAITING", exit_message: "Set status to waiting, #{__FILE__}:#{__LINE__}"})
+  end
 
-    # Get borrowernumber from Koha
-    borrowernumber = Koha.get_borrowernumber(personalnumber_12)
-    if borrowernumber.blank?
-      update_attributes({exit_message: "Borrowernumber does not exist in Koha #{__FILE__}:#{__LINE__}"})
-      return
-    end
+  def check_canceled
+    # Check if the card is still canceled
+    if GukortAdm.is_canceled?(personalnumber)
 
-    # Write to Koha
-    if Koha.card_invalid(borrowernumber)
-      update_attributes({status: "COMPLETED", exit_message: "Koha update card success #{__FILE__}:#{__LINE__}"})
-      return
+      # Handle personalnumber according to rules
+      personalnumber_12 = handle_personalnumber(personalnumber)
+      if personalnumber_12.blank?
+        update_attributes({exit_message: "Personalnumber format error #{__FILE__}:#{__LINE__}"})
+        return
+      end
+
+      # Get borrowernumber from Koha
+      borrowernumber = Koha.get_borrowernumber(personalnumber_12)
+      if borrowernumber.blank?
+        update_attributes({exit_message: "Borrowernumber does not exist in Koha #{__FILE__}:#{__LINE__}"})
+        return
+      end
+
+      # Write to Koha
+      if Koha.card_invalid(borrowernumber)
+        update_attributes({status: "COMPLETED", exit_message: "Koha check canceled success, card canceled #{__FILE__}:#{__LINE__}"})
+        return
+      else
+        update_attributes({exit_message: "Koha check canceled error #{__FILE__}:#{__LINE__}"})
+        return
+      end
     else
-      update_attributes({exit_message: "Koha update card error #{__FILE__}:#{__LINE__}"})
-      return
+      # Don't update card i Koha
+      update_attributes({status: "COMPLETED", exit_message: "Koha check canceled success, not canceled at GukortAdm #{__FILE__}:#{__LINE__}"})
     end
   end
+
 
   def handle_pnr
     # Handle personalnumber according to rules
@@ -348,8 +364,7 @@ class Message < ApplicationRecord
       {address: [message.temp_co, message.temp_address].compact.join(" "),
        zipcode: message.temp_zipcode,
        city: message.temp_city,
-       country: message.temp_country
-      }
+       country: message.temp_country}
     else
       {address: [message.co, message.address].compact.join(" "),
        zipcode: message.zipcode,
@@ -358,9 +373,16 @@ class Message < ApplicationRecord
        b_address: message.temp_address,
        b_zipcode: message.temp_zipcode,
        b_city: message.temp_city,
-       b_country: message.temp_country
-      }
+       b_country: message.temp_country}
     end
+  end
+
+  def handle_personalnumber raw_number
+    return nil if raw_number.blank?
+    return raw_number if raw_number.length.eql?(12)
+    return "20" + raw_number if raw_number.length.eql?(10) && /^[0]/.match(raw_number)
+    return "19" + raw_number if raw_number.length.eql?(10) && /^[^0]/.match(raw_number)
+    return nil
   end
 
   def gna_debarment? message
@@ -372,14 +394,6 @@ class Message < ApplicationRecord
   def local_zipcode? code
     return true if code.present? && code.length.eql?(5) && code.start_with?("4") && !code.eql?("40530")
     false
-  end
-
-  def handle_personalnumber raw_number
-    return nil if raw_number.blank?
-    return raw_number if raw_number.length.eql?(12)
-    return "20" + raw_number if raw_number.length.eql?(10) && /^[0]/.match(raw_number)
-    return "19" + raw_number if raw_number.length.eql?(10) && /^[^0]/.match(raw_number)
-    return nil
   end
 
 end
