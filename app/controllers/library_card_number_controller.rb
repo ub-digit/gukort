@@ -21,7 +21,7 @@ class LibraryCardNumberController < ApplicationController
     _patron.save
     
     #return result json
-    _res = {:personalnumber => _pnr, :librarycardnumber => _patron.library_cardnumber}
+    _res = {personalnumber: _pnr, librarycardnumber: _patron.library_cardnumber}
     render json: _res
   end
 
