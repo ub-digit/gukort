@@ -27,10 +27,10 @@ class Koha
     end
   end
 
-  def self.update(borrowernumber, cardnumber, category, categorycode)
+  def self.update(borrowernumber, cardnumber, category, categorycode, userid)
     config = get_config
     url = "#{config[:base_url]}/members/update"
-    parameter_list = {action: 'update', borrowernumber: borrowernumber, cardnumber: cardnumber, category: category, categorycode: categorycode}
+    parameter_list = {action: 'update', borrowernumber: borrowernumber, cardnumber: cardnumber, category: category, categorycode: categorycode, patronuserid: userid}
     response = RestClient.post(url, parameter_list.merge({userid: config[:user], password: config[:password]}))
     if response && (response.code == 200 || response.code == 201)
       return true

@@ -228,7 +228,7 @@ class Message < ApplicationRecord
     # Check if personalnumber exists in Koha
     if borrowernumber = Koha.get_borrowernumber(personalnumber_12)
       # Personalnumber exists in Koha, update existing patron
-      if Koha.update(borrowernumber, cardnumber, message_category, categorycode)
+      if Koha.update(borrowernumber, cardnumber, message_category, categorycode, userid)
         update_attributes({status: "COMPLETED", exit_message: "Koha update success #{__FILE__}:#{__LINE__}"})
       else
         update_attributes({status: "COMPLETED", exit_message: "Koha update error #{__FILE__}:#{__LINE__}"})
